@@ -58,8 +58,8 @@ x = (x-min(x))/(max(x)-min(x))
 # Not done lol
 
 # Load input array 
-weights = loadmat('ex3weights.mat')
-test = loadmat('ex3data1.mat')
+weights = loadmat('C:/Users/turbo/Python projects/Algos from scratch/Algos_from_scratch/ex3weights.mat')
+test = loadmat('C:/Users/turbo/Python projects/Algos from scratch/Algos_from_scratch/ex3data1.mat')
 input_array = test['X']
 output_array = test['y']
 
@@ -90,31 +90,50 @@ def initialize_random_weights(layer_n_list):
         random_choice_params.append(math.sqrt(6)/(math.sqrt(adjacent_lengths)))
     
     weights_matrix = []
-    for k in random_choice_params:
+    for n, k in enumerate(random_choice_params):
         weights_array = []
-        for i in np.arange(layer_n_list[1]):
+        for i in np.arange(layer_n_list[n+1]):
             x_feature_list = []
-            for j in np.arange(layer_n_list[0]):
+            for j in np.arange(layer_n_list[n]):
                 x_feature_list.append(random.uniform(-k, k))
             weights_array.append(x_feature_list)
         weights_matrix.append(weights_array)
 
     return weights_matrix
 
+# Temp
+test_y = [i[0] for i in test['y']==10]
+test_x = test['X'][test_y]
+
+def propagate(observation, weights_matrix, n_minus_1_list):
+    node_matrix = [observation.tolist()]
+    for n in np.arange(len(n_minus_1_list)):
+        node_array = []
+        for i in np.arange(n_minus_1_list[n]):
+            node_array.append(np.dot(weights_matrix[n][i], node_matrix[n]))
+        node_matrix.append(node_array)
+    return node_matrix
+
 def neural_net(input_array, layer_n_list):
     # Add column of 1s at the beginning
     input_array = np.concatenate((np.array([[1]]*input_array.shape[0]),input_array), axis=1)
-    input_layer_n = input_array.shape[1]
-    layer_n_list = [input_layer_n] + layer_n_list
-
-    weights_matrix = initialize_random_weights(layer_n_list)
-
-    activation_layers = []
-    layer = [1]
-        layer.append(np.dot(debugging_vector, weights_matrix[1,i]))
+    layer_N_list = [input_array.shape[1]] + layer_n_list
     
+    weights_matrix = initialize_random_weights(layer_N_list)
 
-    return layer_2_a
+    test = input_array[0]
 
+    node_matrix = propagate(test, weights_matrix, layer_n_list)
 
-neural_net(input_array, [25, 10])
+    print(node_matrix[2][0])
+
+    # propagate(debugging_array[0], weights_array)
+    # for i, n in enumerate(layer_n_list[:-1]):
+    #     print('array', debugging_array.shape)
+    #     print('weights', np.array(weights_matrix[i]).shape)
+    #     debugging_array = propagate(debugging_array[0], weights_matrix[i], n)
+    return debugging_array
+
+#print(len(initialize_random_weights([401, 25, 10])[0]))
+neural_net(input_array, [25,10])
+
