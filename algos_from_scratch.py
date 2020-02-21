@@ -52,34 +52,9 @@ x = (x-min(x))/(max(x)-min(x))
 # t3 = time.time()
 # print('their time',t2-t3)
 
-# ===== TEMP ===== #
-# input_array2 = np.concatenate((np.array([[1]]*input_array.shape[0]),input_array), axis=1)
-
-# x_range = np.linspace(0.8,0.05,20)
-
-# for cv_pct in x_range:
-#     train_in, test_in, training_out, test_out = train_cv_split(input_array2, output_array, cv_pct=cv_pct)
-#     train_error_temp = []
-#     test_error_temp = []
-#     for i in np.arange(5):
-#         train_error, weights_matrix = neural_net(input_array2, output_array, [25,10], 0, 50, visualize_error = False)
-#         node_array = propagate(test_in, weights_matrix, [25,10])
-#         test_error = (test_out - node_array[-1].round()).mean()
-#         test_error_temp.append(test_error)
-#         train_error_temp.append(train_error)
-#     train_error_vector.append(np.mean(train_error_temp))
-#     test_error_vector.append(np.mean(test_error_temp))
-#     # node_array = propagate(test_in, weights_matrix, [25,10])
-#     # test_error_vector.append((test_out - node_array[-1].round()).mean())
-#     # print('train error', train_error)
-#     # print('test error', test_error)
-# plt.plot(x_range, train_error_vector)
-# plt.plot(x_range, test_error_vector)
-# plt.show()
 
 # ==============================================================
 # Neural net from scratch
-# Not done lol
 
 # Load input array 
 weights = loadmat('C:/Users/turbo/Python projects/Algos from scratch/Algos_from_scratch/ex3weights.mat')
@@ -93,6 +68,7 @@ weights_1 = weights['Theta1']
 # Weights for second layer
 weights_2 = weights['Theta2']
 
+@cuda.autojit
 def sigmoid(x):
     """
     Computes estimated y values given theta parameters and x values. 
@@ -107,6 +83,7 @@ def gradient(x, theta_vector):
     """
     return sigmoid(x, theta_vector)*(1-sigmoid(x, theta_vector))
 
+@cuda.autojit
 def initialize_random_weights(layer_n_list):
     random_choice_params = []
     for i in np.arange(len(layer_n_list)-1):
@@ -140,6 +117,7 @@ output_array = np.array(transformed_y)
 random.Random(4).shuffle(input_array)
 random.Random(4).shuffle(output_array)
 
+@cuda.jit('void(float64[:,:], int64[:,:], float64[:,:], int64[:])', device=True)
 def backpropagate(node_array, output_array, weights_matrix, layer_n_list):
     output_error = node_array[-1] - output_array
     d_vector = [output_error]
@@ -154,6 +132,7 @@ def backpropagate(node_array, output_array, weights_matrix, layer_n_list):
 
     return grad_adjustmet_vector, d_vector[0]
 
+@cuda.jit('void(int64[:,:], float64[:,:], int64[:])', device=True)
 def propagate(input_array, weights_matrix, layer_n_list):
     node_array = [input_array]
     for i in np.arange(len(layer_n_list)-1):
@@ -168,9 +147,10 @@ def propagate(input_array, weights_matrix, layer_n_list):
 
     return node_array
 
-def neural_net(input_array, output_array, layer_n_list, n_iterations, gamma=0, visualize_error=False):
+@cuda.jit('float64(int32[:,:], int32[:,:], int64[:], int32, float64, int32)')
+def neural_net(input_array, output_array, layer_n_list, gamma=0, visualize_error=0):
     layer_N_list = [input_array.shape[1]] + layer_n_list
-
+    n_iterations = 10
     # Procedurally initiate matrix of weights
     weights_matrix = initialize_random_weights(layer_N_list)
 
@@ -194,10 +174,13 @@ def neural_net(input_array, output_array, layer_n_list, n_iterations, gamma=0, v
         plt.plot(error)
         plt.show()
 
-    return final_error, weights_matrix
+    return final_error#, weights_matrix
 
-#neural_net(input_array, output_array,[50, 25, 10], n_iterations = 50)
-
+start = timer()
+griddim = (10,10)
+blockdim = (10,10)
+neural_net[griddim, blockdim](input_array, output_array, [100, 90, 10], 0, 0)
+print('time:', timer()-start)
 
 # Diagnosing bias vs variance
 # ====================================================================================================
@@ -230,7 +213,6 @@ test_error_vector = []
 
 
 class neural_network():
-
     def load_data(self, x_array, y_array):
         x_array = np.concatenate((np.array([[1]]*x_array.shape[0]), x_array), axis=1)
         random.Random(4).shuffle(x_array)
@@ -282,17 +264,34 @@ class neural_network():
 
         self.node_array = node_array
         self.weights_matrix = weights_matrix
-        self.train_error = (self.y_array_train - self.node_array[-1].round()).mean()
+        self.train_error = abs((self.y_array_train - self.node_array[-1].round())).mean()
 
     def test_net(self):
         node_array = propagate(self.x_array_test, self.weights_matrix, self.layer_n_list)
-        self.test_error = (self.y_array_test - node_array[-1].round()).sum()
-net = neural_network()
+        self.test_error = abs((self.y_array_test - node_array[-1].round())).mean()
 
-net.load_data(input_array, output_array)
+# net = neural_network()
 
-net.train_net([50,25,10], 5)
-net.test_net()
+# net.load_data(input_array, output_array)
 
-print(net.train_error)
-print(net.test_error)
+# start = timer()
+# x_list = np.linspace(0.1,0.5,5)
+# test = []
+# train = [] 
+# for i in x_list:
+#     test_error_vector = []
+#     train_error_vector = []
+#     for j in np.arange(10):
+#         net.train_cv_split(cv_pct = i)
+#         net.train_net([100,10], 100)
+#         net.test_net()
+#         test_error_vector.append(net.test_error)
+#         train_error_vector.append(net.train_error)
+#     test.append(np.mean(test_error_vector))
+#     train.append(np.mean(train_error_vector))
+# print('without gpu:', timer()-start)
+
+
+#plt.plot(x_list, np.array(test))
+#plt.plot(x_list, np.array(train))
+#plt.show()
