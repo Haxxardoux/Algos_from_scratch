@@ -52,6 +52,30 @@ x = (x-min(x))/(max(x)-min(x))
 # t3 = time.time()
 # print('their time',t2-t3)
 
+# ===== TEMP ===== #
+# input_array2 = np.concatenate((np.array([[1]]*input_array.shape[0]),input_array), axis=1)
+
+# x_range = np.linspace(0.8,0.05,20)
+
+# for cv_pct in x_range:
+#     train_in, test_in, training_out, test_out = train_cv_split(input_array2, output_array, cv_pct=cv_pct)
+#     train_error_temp = []
+#     test_error_temp = []
+#     for i in np.arange(5):
+#         train_error, weights_matrix = neural_net(input_array2, output_array, [25,10], 0, 50, visualize_error = False)
+#         node_array = propagate(test_in, weights_matrix, [25,10])
+#         test_error = (test_out - node_array[-1].round()).mean()
+#         test_error_temp.append(test_error)
+#         train_error_temp.append(train_error)
+#     train_error_vector.append(np.mean(train_error_temp))
+#     test_error_vector.append(np.mean(test_error_temp))
+#     # node_array = propagate(test_in, weights_matrix, [25,10])
+#     # test_error_vector.append((test_out - node_array[-1].round()).mean())
+#     # print('train error', train_error)
+#     # print('test error', test_error)
+# plt.plot(x_range, train_error_vector)
+# plt.plot(x_range, test_error_vector)
+# plt.show()
 
 # ==============================================================
 # Neural net from scratch
@@ -116,24 +140,24 @@ output_array = np.array(transformed_y)
 random.Random(4).shuffle(input_array)
 random.Random(4).shuffle(output_array)
 
-def backpropagate(transformed_y, nodes_matrix, weights_matrix, n_minus_1_list):
-    nodes_matrix = nodes_matrix[::-1]
-    weights_matrix = weights_matrix[::-1]
-    output_error = np.array(nodes_matrix[0])-np.array(transformed_y)
-    error_matrix = [output_error.tolist()]
-    delta = output_error
-    for i, k in enumerate(n_minus_1_list):
-        gz = np.array(nodes_matrix[i+1])*(1-np.array(nodes_matrix[i+1]))
-        delta = np.dot(np.array(weights_matrix[i]).T,delta) * gz
-        error_matrix.append(delta.tolist())
-    #print(np.array(error_matrix[0]))
-    #print(np.array(nodes_matrix[1]))
-    return error_matrix 
+def backpropagate(node_array, output_array, weights_matrix, layer_n_list):
+    output_error = node_array[-1] - output_array
+    d_vector = [output_error]
+    grad_adjustmet_vector = [np.matmul(output_error.T, node_array[-2])]
+    for i in np.arange(len(layer_n_list)-1):
+        output_error = np.matmul(output_error, weights_matrix[-(i+1)][:,1:]) * (node_array[-(i+2)][:,1:]*(1-node_array[-(i+2)][:,1:]))
+        grad_adjustment = np.matmul(output_error.T, node_array[-(i+3)])
+        d_vector.append(output_error)
+        grad_adjustmet_vector.append(grad_adjustment)
+    
+    grad_adjustmet_vector.reverse()
+
+    return grad_adjustmet_vector, d_vector[0]
 
 def propagate(input_array, weights_matrix, layer_n_list):
     node_array = [input_array]
     for i in np.arange(len(layer_n_list)-1):
-        foo = np.matmul(node_array[0], weights_matrix[0].T)
+        foo = np.matmul(node_array[i], weights_matrix[i].T)
         foo = sigmoid(foo)
         foo = np.concatenate((np.array([[1]]*foo.shape[0]), foo), axis=1)
         node_array.append(foo)
@@ -144,11 +168,8 @@ def propagate(input_array, weights_matrix, layer_n_list):
 
     return node_array
 
-def neural_net(input_array, layer_n_list, gamma, n_iterations):
-    # Add column of 1s at the beginning
-    input_array = np.concatenate((np.array([[1]]*input_array.shape[0]),input_array), axis=1)
+def neural_net(input_array, output_array, layer_n_list, n_iterations, gamma=0, visualize_error=False):
     layer_N_list = [input_array.shape[1]] + layer_n_list
-    temp = input_array
 
     # Procedurally initiate matrix of weights
     weights_matrix = initialize_random_weights(layer_N_list)
@@ -156,25 +177,122 @@ def neural_net(input_array, layer_n_list, gamma, n_iterations):
     # Gradient descent iteration
     error = []
     for i in np.arange(n_iterations):
-        input_array = temp
+
+        # Forward propagation
         node_array = propagate(input_array,weights_matrix,layer_n_list)
 
-        # add backpropogate function
-        d3 = node_array[2] - output_array
-        d2 = np.matmul(d3, weights_matrix[1][:,1:]) * (node_array[1][:,1:]*(1-node_array[1][:,1:]))
-        Delta2 = np.matmul(d3.T, node_array[1])
-        Delta1 = np.matmul(d2.T, node_array[0])
-        weights_matrix[1] -= (Delta2 + gamma*weights_matrix[1]) / (5000)
-        weights_matrix[0] -= (Delta1 + gamma*weights_matrix[0]) / (5000)
-        error.append(d3.sum())
+        # Backpropagation
+        grad_adjustment_vector, iter_error = backpropagate(node_array, output_array, weights_matrix, layer_n_list)
 
-    print((output_array - node_array[2].round()).mean())
-    plt.plot(error)
-    plt.show()
+        for i in np.arange(len(layer_n_list)):
+            weights_matrix[i] -= (grad_adjustment_vector[i] + gamma*weights_matrix[i]) / 5000
+        error.append(iter_error.sum())
 
-    return 
+    final_error = (output_array - node_array[-1].round()).mean()
+    
+    if visualize_error == True:
+        plt.plot(error)
+        plt.show()
+
+    return final_error, weights_matrix
+
+#neural_net(input_array, output_array,[50, 25, 10], n_iterations = 50)
 
 
-print(neural_net(input_array, [25,10], 0.097,300))
+# Diagnosing bias vs variance
+# ====================================================================================================
+
+def train_cv_split(data, data2=None, cv_pct=0.2):
+    '''
+    Inputs - Dataset in the form of np array, percentage of dataset you would like to select as cross validation set \n
+    There are two "dataset" arguments, data and data2. This is in case you have separate arrays for x and y. They will be sampled with the same indices.
+    Outputs - Training set, cross validation set, output format is np array
+    '''
+    idx = np.random.randint(data.shape[0], size=int(round(data.shape[0]*cv_pct)))
+    cv = data[idx, :]
+    training = data[~idx, :]
+    if data2 is not None:
+        cv_2 = data2[idx, :]
+        training_2 = data[~idx, :]
+        return training, cv, training_2, cv_2
+    
+    return training, cv
+
+#train, test = train_cv_split(input_array)
+
+train_error_vector = []
+test_error_vector = []
 
 
+# ======================================================================================================
+### COMBINING INTO CLASS OBJECT ###
+# ======================================================================================================
+
+
+class neural_network():
+
+    def load_data(self, x_array, y_array):
+        x_array = np.concatenate((np.array([[1]]*x_array.shape[0]), x_array), axis=1)
+        random.Random(4).shuffle(x_array)
+        random.Random(4).shuffle(y_array)
+        self.x_array = x_array
+        self.y_array = y_array
+
+    def train_cv_split(self, cv_pct=0.2):
+        '''
+        Inputs - Dataset in the form of np array, percentage of dataset you would like to select as cross validation set \n
+        There are two "dataset" arguments, data and data2. This is in case you have separate arrays for x and y. They will be sampled with the same indices.
+        Outputs - Training set, cross validation set, output format is np array
+        '''
+        
+        idx = np.random.randint(self.x_array.shape[0], size=int(round(self.x_array.shape[0]*cv_pct)))
+        
+        self.x_array_test = self.x_array[idx, :]
+        self.x_array_train = self.x_array[~idx, :]
+        self.y_array_test = self.y_array[idx, :]
+        self.y_array_train = self.y_array[~idx, :]
+
+    def train_net(self, layer_n_list, n_iterations, gamma=0):
+        self.n_iterations = n_iterations
+        self.layer_n_list = layer_n_list
+
+        try:
+            self.x_array_train
+        except AttributeError:
+            self.train_cv_split()
+
+        layer_N_list = [self.x_array_train.shape[1]] + self.layer_n_list
+
+        # Procedurally initiate matrix of weights
+        weights_matrix = initialize_random_weights(layer_N_list)
+
+        # Gradient descent iteration
+        error = []
+        for i in np.arange(self.n_iterations):
+
+            # Forward propagation
+            node_array = propagate(self.x_array_train, weights_matrix, self.layer_n_list)
+
+            # Backpropagation
+            grad_adjustment_vector, iter_error = backpropagate(node_array, self.y_array_train, weights_matrix, self.layer_n_list)
+
+            for i in np.arange(len(self.layer_n_list)):
+                weights_matrix[i] -= (grad_adjustment_vector[i] + gamma*weights_matrix[i]) / 5000
+            error.append(iter_error.sum())
+
+        self.node_array = node_array
+        self.weights_matrix = weights_matrix
+        self.train_error = (self.y_array_train - self.node_array[-1].round()).mean()
+
+    def test_net(self):
+        node_array = propagate(self.x_array_test, self.weights_matrix, self.layer_n_list)
+        self.test_error = (self.y_array_test - node_array[-1].round()).sum()
+net = neural_network()
+
+net.load_data(input_array, output_array)
+
+net.train_net([50,25,10], 5)
+net.test_net()
+
+print(net.train_error)
+print(net.test_error)
